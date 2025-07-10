@@ -1,0 +1,5 @@
+{
+  "name": "Personal Dashboard",
+  "description": "A customizable personal dashboard to store your favorite links and quick notes. All data is stored locally in your browser. You can personalize the look and feel, and export or import your data at any time.",
+  "requestFramePermissions": []
+}
