@@ -25,34 +25,43 @@ const AddNoteModal: React.FC<AddNoteModalProps> = ({ onClose, onAdd, accentColor
   };
 
   return (
-    <Modal onClose={onClose} title="Add New Note" themeClasses={themeClasses}>
+    <Modal onClose={onClose} title="Add New Note" themeClasses={themeClasses} maxWidth="max-w-4xl">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="note-title" className="block text-sm font-medium text-gray-300">Title</label>
+          <label htmlFor="note-title" className="block text-sm font-medium text-gray-400 mb-1">Title</label>
           <input
             type="text"
             id="note-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
-            className={`mt-1 block w-full ${themeClasses.input} border ${themeClasses.border} rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-2 ${accentClasses.ring} focus:border-transparent`}
+            placeholder="Note Title"
+            className={`block w-full ${themeClasses.input} border ${themeClasses.border} rounded-md shadow-sm py-3 px-4 text-white focus:outline-none focus:ring-2 ${accentClasses.ring} focus:border-transparent text-lg font-bold`}
           />
         </div>
         <div>
-          <label htmlFor="note-content" className="block text-sm font-medium text-gray-300">Content</label>
+          <label htmlFor="note-content" className="block text-sm font-medium text-gray-400 mb-1">Content</label>
           <textarea
             id="note-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             required
-            rows={4}
-            className={`mt-1 block w-full ${themeClasses.input} border ${themeClasses.border} rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-2 ${accentClasses.ring} focus:border-transparent`}
+            rows={12}
+            placeholder="Start typing your note here..."
+            className={`block w-full ${themeClasses.input} border ${themeClasses.border} rounded-md shadow-sm py-3 px-4 text-white focus:outline-none focus:ring-2 ${accentClasses.ring} focus:border-transparent resize-none leading-relaxed`}
           />
         </div>
-        <div className="flex justify-end pt-2">
+        <div className="flex justify-end pt-4 border-t border-gray-700">
+          <button
+            type="button"
+            onClick={onClose}
+            className={`mr-3 px-4 py-2 text-sm font-medium text-gray-300 ${themeClasses.buttonHover} rounded-md transition-colors`}
+          >
+            Cancel
+          </button>
           <button
             type="submit"
-            className={`px-4 py-2 text-sm font-medium text-white ${accentClasses.bg} rounded-md shadow-sm hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 ${themeClasses.ringOffsetModal} ${accentClasses.ring}`}
+            className={`px-6 py-2 text-sm font-medium text-white ${accentClasses.bg} rounded-md shadow-sm hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 ${themeClasses.ringOffsetModal} ${accentClasses.ring} transition-opacity`}
           >
             Add Note
           </button>

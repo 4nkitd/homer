@@ -6,6 +6,7 @@ import { parseJsonBackup, parseChromeBookmarks } from './services/importService'
 import { ACCENT_COLOR_CLASSES, LINK_STORE, NOTE_STORE, EVENT_STORE, BACKGROUND_THEMES, CATEGORY_STORE } from './constants';
 import Header from './components/Header';
 import SearchBar from './components/SearchBar';
+import WeatherPill from './components/WeatherPill';
 import LinkCard from './components/LinkCard';
 import NoteCard from './components/NoteCard';
 import EventCard from './components/EventCard';
@@ -17,6 +18,23 @@ import SettingsModal from './components/SettingsModal';
 import UtilityBar from './components/UtilityBar';
 import AIChatView from './components/AIChatView';
 
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+
 const App: React.FC = () => {
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [notes, setNotes] = useState<NoteItem[]>([]);
@@ -27,6 +45,7 @@ const App: React.FC = () => {
     accentColor: 'blue',
     searchUrl: 'https://www.google.com/search?q={query}&udm=14&as_qdr=all&as_occt=any',
     backgroundName: 'gray',
+    autoLocation: false,
   });
   const [isLinkModalOpen, setLinkModalOpen] = useState(false);
   const [isNoteModalOpen, setNoteModalOpen] = useState(false);
@@ -38,13 +57,31 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('collapsed-folders');
     return saved ? new Set(JSON.parse(saved)) : new Set();
   });
+  const [collapsedNotes, setCollapsedNotes] = useState<boolean>(() => {
+    return localStorage.getItem('collapsed-notes') === 'true';
+  });
   const [isLoading, setIsLoading] = useState(true);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const themeClasses = useMemo(() => BACKGROUND_THEMES[settings.backgroundName], [settings.backgroundName]);
 
   useEffect(() => {
     localStorage.setItem('collapsed-folders', JSON.stringify(Array.from(collapsedFolders)));
   }, [collapsedFolders]);
+
+  useEffect(() => {
+    localStorage.setItem('collapsed-notes', collapsedNotes.toString());
+  }, [collapsedNotes]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -55,10 +92,30 @@ const App: React.FC = () => {
         getAll<EventItem>(EVENT_STORE),
         getAll<CategoryItem>(CATEGORY_STORE),
       ]);
-      setLinks(dbLinks.sort((a, b) => b.createdAt - a.createdAt));
-      setNotes(dbNotes.sort((a, b) => b.createdAt - a.createdAt));
+      
+      // Sort by order if available, then by createdAt
+      const sortItems = (a: any, b: any) => {
+        if (a.order !== undefined && b.order !== undefined) {
+          return a.order - b.order;
+        }
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return b.createdAt - a.createdAt;
+      };
+
+      setLinks(dbLinks.sort(sortItems));
+      setNotes(dbNotes.sort(sortItems));
       setEvents(dbEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.time.localeCompare(b.time)));
-      setCategories(dbCategories.sort((a, b) => a.name.localeCompare(b.name)));
+      
+      // Sort categories by order, then alphabetical
+      setCategories(dbCategories.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) {
+          return a.order - b.order;
+        }
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return a.name.localeCompare(b.name);
+      }));
     } catch (error) {
       console.error("Failed to load data from DB", error);
     } finally {
@@ -74,6 +131,39 @@ const App: React.FC = () => {
     }
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!settings.autoLocation) return;
+
+    const CACHE_KEY = 'cached-location';
+    const CACHE_TIME_KEY = 'cached-location-time';
+    const SIX_HOURS = 6 * 60 * 60 * 1000;
+
+    const fetchLocation = async () => {
+      try {
+        const response = await fetch('https://ipinfo.io/json');
+        const data = await response.json();
+        if (data.city) {
+          setSettings(prev => ({ ...prev, weatherCity: data.city }));
+          localStorage.setItem(CACHE_KEY, data.city);
+          localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
+        }
+      } catch (error) {
+        console.error("Failed to fetch location:", error);
+      }
+    };
+
+    const cachedCity = localStorage.getItem(CACHE_KEY);
+    const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+
+    if (cachedCity && cachedTime && (Date.now() - parseInt(cachedTime)) < SIX_HOURS) {
+      if (settings.weatherCity !== cachedCity) {
+        setSettings(prev => ({ ...prev, weatherCity: cachedCity }));
+      }
+    } else {
+      fetchLocation();
+    }
+  }, [settings.autoLocation, settings.weatherCity]);
 
   useEffect(() => {
     localStorage.setItem('dashboard-settings', JSON.stringify(settings));
@@ -144,19 +234,28 @@ const App: React.FC = () => {
 
 
   const handleAddLink = async (url: string, title: string, category: string) => {
-    const newLink: LinkItem = { id: crypto.randomUUID(), url, title, category, createdAt: Date.now() };
+    const minOrder = links.length > 0 ? Math.min(...links.map(l => l.order ?? 0)) : 0;
+    const newLink: LinkItem = { 
+      id: crypto.randomUUID(), 
+      url, 
+      title, 
+      category, 
+      createdAt: Date.now(),
+      order: minOrder - 1
+    };
     await add<LinkItem>(LINK_STORE, newLink);
     
     // Also ensure category exists in store if it's new
     if (category !== 'General' && !categories.some((c: CategoryItem) => c.name === category)) {
+      const minCatOrder = categories.length > 0 ? Math.min(...categories.map(c => c.order ?? 0)) : 0;
       await add(CATEGORY_STORE, {
         id: crypto.randomUUID(),
         name: category,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        order: minCatOrder - 1
       });
     }
 
-    setLinks((prev: LinkItem[]) => [newLink, ...prev].sort((a, b) => b.createdAt - a.createdAt));
     await loadData();
     setLinkModalOpen(false);
   };
@@ -167,15 +266,27 @@ const App: React.FC = () => {
   };
 
   const handleAddNote = async (title: string, content: string) => {
-    const newNote: NoteItem = { id: crypto.randomUUID(), title, content, createdAt: Date.now() };
+    const minOrder = notes.length > 0 ? Math.min(...notes.map(n => n.order ?? 0)) : 0;
+    const newNote: NoteItem = { 
+      id: crypto.randomUUID(), 
+      title, 
+      content, 
+      createdAt: Date.now(),
+      order: minOrder - 1
+    };
     await add<NoteItem>(NOTE_STORE, newNote);
-    setNotes(prev => [newNote, ...prev].sort((a, b) => b.createdAt - a.createdAt));
+    await loadData();
     setNoteModalOpen(false);
   };
 
   const handleDeleteNote = async (id: string) => {
     await remove(NOTE_STORE, id);
     setNotes(prev => prev.filter(note => note.id !== id));
+  };
+
+  const handleUpdateNote = async (updatedNote: NoteItem) => {
+    await update<NoteItem>(NOTE_STORE, updatedNote);
+    setNotes(prev => prev.map(n => n.id === updatedNote.id ? updatedNote : n));
   };
 
   const handleAddEvent = async (title: string, date: string, time: string, link: string, description: string) => {
@@ -191,7 +302,11 @@ const App: React.FC = () => {
   };
 
   const handleUpdateSettings = (newSettings: Partial<Settings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    if (newSettings.autoLocation === false) {
+      setSettings(prev => ({ ...prev, ...newSettings, weatherCity: undefined }));
+    } else {
+      setSettings(prev => ({ ...prev, ...newSettings }));
+    }
   };
 
   const handleExport = async () => {
@@ -199,13 +314,16 @@ const App: React.FC = () => {
       links: await getAll<LinkItem>(LINK_STORE),
       notes: await getAll<NoteItem>(NOTE_STORE),
       events: await getAll<EventItem>(EVENT_STORE),
+      categories: await getAll<CategoryItem>(CATEGORY_STORE),
+      settings: settings,
+      version: 1
     };
     const dataStr = JSON.stringify(dataToExport, null, 2);
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `dashboard-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `homer-backup-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -222,15 +340,29 @@ const App: React.FC = () => {
           if (confirm('This will replace all your current data. Are you sure?')) {
              await Promise.all([clear(LINK_STORE), clear(NOTE_STORE), clear(EVENT_STORE), clear(CATEGORY_STORE)]);
              
-             // Extract unique categories from links
-             const uniqueCategories = Array.from(new Set(data.links.map((l: LinkItem) => l.category || 'General')));
+             // If categories are in the backup, use them. Otherwise extract from links.
+             let categoriesToImport: CategoryItem[] = [];
+             if (data.categories && data.categories.length > 0) {
+               categoriesToImport = data.categories;
+             } else {
+               const uniqueCategoryNames = Array.from(new Set(data.links.map((l: LinkItem) => l.category || 'General')));
+               categoriesToImport = uniqueCategoryNames.map(name => ({
+                 id: crypto.randomUUID(),
+                 name,
+                 createdAt: Date.now()
+               }));
+             }
              
              await Promise.all([
               ...data.links.map((link: LinkItem) => add(LINK_STORE, link)),
               ...data.notes.map((note: NoteItem) => add(NOTE_STORE, note)),
               ...(data.events || []).map((event: EventItem) => add(EVENT_STORE, event)),
-              ...uniqueCategories.map(cat => add(CATEGORY_STORE, { id: crypto.randomUUID(), name: cat, createdAt: Date.now() }))
+              ...categoriesToImport.map(cat => add(CATEGORY_STORE, cat))
             ]);
+
+            if (data.settings) {
+              handleUpdateSettings(data.settings);
+            }
           } else {
             return;
           }
@@ -313,6 +445,20 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateFolderColor = async (name: string, color: string) => {
+    try {
+      const catToUpdate = categories.find((c: CategoryItem) => c.name === name);
+      if (catToUpdate) {
+        await update(CATEGORY_STORE, { ...catToUpdate, color });
+      } else {
+        await add(CATEGORY_STORE, { id: crypto.randomUUID(), name, color, createdAt: Date.now() });
+      }
+      await loadData();
+    } catch (error) {
+      console.error('Failed to update folder color:', error);
+    }
+  };
+
   const handleDeleteFolder = async (name: string) => {
     if (!confirm(`Are you sure you want to delete the folder "${name}" and all its links?`)) return;
     
@@ -342,7 +488,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCreateFolder = async (name: string) => {
+  const handleCreateFolder = async (name: string, color?: string) => {
     if (!name.trim()) return;
     if (categories.some((c: CategoryItem) => c.name.toLowerCase() === name.toLowerCase())) {
       alert('Folder already exists.');
@@ -353,12 +499,76 @@ const App: React.FC = () => {
       await add(CATEGORY_STORE, {
         id: crypto.randomUUID(),
         name: name.trim(),
+        color,
         createdAt: Date.now()
       });
       await loadData();
     } catch (error) {
       console.error('Failed to create folder:', error);
       alert('Failed to create folder.');
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    // Check if we are dragging a link
+    const activeLink = links.find(l => l.id === active.id);
+    const overLink = links.find(l => l.id === over.id);
+
+    if (activeLink && overLink) {
+      // Reordering links within the same category or across categories
+      const oldIndex = links.findIndex(l => l.id === active.id);
+      const newIndex = links.findIndex(l => l.id === over.id);
+      
+      const newLinks = arrayMove(links, oldIndex, newIndex);
+      
+      // Update category if moved to a different one
+      if (activeLink.category !== overLink.category) {
+        const updatedLink = { ...activeLink, category: overLink.category };
+        newLinks[newIndex] = updatedLink;
+        await update(LINK_STORE, updatedLink);
+      }
+
+      // Update orders for all links in the affected categories
+      const updatedLinks = newLinks.map((link, index) => ({ ...link, order: index }));
+      setLinks(updatedLinks);
+      
+      // Persist to DB
+      await Promise.all(updatedLinks.map(link => update(LINK_STORE, link)));
+      return;
+    }
+
+    // Check if we are dragging a note
+    const activeNote = notes.find(n => n.id === active.id);
+    const overNote = notes.find(n => n.id === over.id);
+
+    if (activeNote && overNote) {
+      const oldIndex = notes.findIndex(n => n.id === active.id);
+      const newIndex = notes.findIndex(n => n.id === over.id);
+      
+      const newNotes = arrayMove(notes, oldIndex, newIndex);
+      const updatedNotes = newNotes.map((note, index) => ({ ...note, order: index }));
+      setNotes(updatedNotes);
+      
+      await Promise.all(updatedNotes.map(note => update(NOTE_STORE, note)));
+      return;
+    }
+
+    // Check if we are dragging a category
+    const activeCat = categories.find(c => c.id === active.id);
+    const overCat = categories.find(c => c.id === over.id);
+
+    if (activeCat && overCat) {
+      const oldIndex = categories.findIndex(c => c.id === active.id);
+      const newIndex = categories.findIndex(c => c.id === over.id);
+      
+      const newCats = arrayMove(categories, oldIndex, newIndex);
+      const updatedCats = newCats.map((cat, index) => ({ ...cat, order: index }));
+      setCategories(updatedCats);
+      
+      await Promise.all(updatedCats.map(cat => update(CATEGORY_STORE, cat)));
     }
   };
 
@@ -418,31 +628,68 @@ const App: React.FC = () => {
   }, [links, categories]);
 
   const { expandedFoldersList, collapsedFoldersList } = useMemo(() => {
-    const expanded: [string, LinkItem[]][] = [];
-    const collapsed: [string, LinkItem[]][] = [];
-    (Object.entries(groupedLinks) as [string, LinkItem[]][]).forEach(([category, categoryLinks]) => {
-      if (collapsedFolders.has(category)) {
-        collapsed.push([category, categoryLinks]);
+    const expanded: [CategoryItem, LinkItem[]][] = [];
+    const collapsed: [CategoryItem, LinkItem[]][] = [];
+    
+    Object.entries(groupedLinks).forEach(([categoryName, categoryLinks]) => {
+      const categoryObj = categories.find(c => c.name === categoryName) || {
+        id: categoryName,
+        name: categoryName,
+        createdAt: 0,
+        color: 'text-gray-400'
+      };
+      
+      if (collapsedFolders.has(categoryName)) {
+        collapsed.push([categoryObj, categoryLinks]);
       } else {
-        expanded.push([category, categoryLinks]);
+        expanded.push([categoryObj, categoryLinks]);
       }
     });
     return { expandedFoldersList: expanded, collapsedFoldersList: collapsed };
-  }, [groupedLinks, collapsedFolders]);
+  }, [groupedLinks, collapsedFolders, categories]);
 
   return (
     <div className={`min-h-screen text-gray-100 font-sans transition-all duration-300 ${isUtilityBarOpen ? 'pb-80' : ''}`}>
       <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
         <div className={`sticky top-0 z-30 ${themeClasses.body} -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pb-4 mb-4`}>
-          <Header onSettingsClick={() => setSettingsModalOpen(true)} accentColor={settings.accentColor} themeClasses={themeClasses} eventsToday={eventsToday} />
-          {settings.showSearch && <SearchBar accentColor={settings.accentColor} searchUrl={settings.searchUrl} themeClasses={themeClasses} links={links} />}
+          <Header 
+            onSettingsClick={() => setSettingsModalOpen(true)} 
+            accentColor={settings.accentColor} 
+            themeClasses={themeClasses} 
+            eventsToday={eventsToday} 
+          />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 my-8">
+            {settings.showSearch && (
+              <div className="flex-grow w-full">
+                <SearchBar 
+                  accentColor={settings.accentColor} 
+                  searchUrl={settings.searchUrl} 
+                  themeClasses={themeClasses} 
+                  links={links} 
+                  notes={notes}
+                  events={events}
+                />
+              </div>
+            )}
+            {settings.weatherCity && (
+              <WeatherPill 
+                weatherCity={settings.weatherCity} 
+                accentColor={settings.accentColor} 
+                themeClasses={themeClasses} 
+              />
+            )}
+          </div>
         </div>
         
         <main>
           {isLoading ? (
             <div className="text-center text-gray-400">Loading your dashboard...</div>
           ) : (
-            <>
+            <DndContext 
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
               {!hasLinks && !hasNotes && !hasEvents ? (
                 <div className="text-center text-gray-500 py-16">
                   <h2 className="text-2xl font-semibold">Your dashboard is empty!</h2>
@@ -454,27 +701,36 @@ const App: React.FC = () => {
                     <section className={hasLinks && (hasNotes || hasEvents) ? 'lg:col-span-7' : ''}>
                       <div className="space-y-12">
                         {/* Expanded Folders */}
-                        {expandedFoldersList.map(([category, categoryLinks]: [string, LinkItem[]]) => (
-                          <div key={category} className="animate-fadeIn">
-                            <button 
-                              onClick={() => toggleFolder(category)}
-                              className={`w-full flex items-center justify-between mb-4 border-b pb-1 ${themeClasses.border} group transition-colors hover:border-gray-500`}
-                            >
-                              <h2 className="text-xl font-bold text-gray-400 group-hover:text-gray-200 transition-colors">{category}</h2>
-                              <div className="flex items-center space-x-2">
-                                <span className="text-xs text-gray-600 group-hover:text-gray-400">{categoryLinks.length} items</span>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </div>
-                            </button>
-                            <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] animate-fadeIn">
-                              {categoryLinks.map((link: LinkItem) => (
-                                <LinkCard key={link.id} link={link} onDelete={handleDeleteLink} accentColor={settings.accentColor} themeClasses={themeClasses} />
-                              ))}
+                        <SortableContext items={expandedFoldersList.map(([cat]: [CategoryItem, LinkItem[]]) => cat.id)} strategy={verticalListSortingStrategy}>
+                          {expandedFoldersList.map(([category, categoryLinks]: [CategoryItem, LinkItem[]]) => (
+                            <div key={category.id} className="animate-fadeIn">
+                              <button 
+                                onClick={() => toggleFolder(category.name)}
+                                className={`w-full flex items-center justify-between mb-4 border-b pb-1 ${themeClasses.border} group transition-colors hover:border-gray-500`}
+                              >
+                                <div className="flex items-center">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 mr-2 ${category.color || 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                  </svg>
+                                  <h2 className="text-xl font-bold text-gray-400 group-hover:text-gray-200 transition-colors">{category.name}</h2>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-xs text-gray-600 group-hover:text-gray-400">{categoryLinks.length} items</span>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </div>
+                              </button>
+                              <SortableContext items={categoryLinks.map(l => l.id)} strategy={rectSortingStrategy}>
+                                <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] animate-fadeIn">
+                                  {categoryLinks.map((link: LinkItem) => (
+                                    <LinkCard key={link.id} link={link} onDelete={handleDeleteLink} accentColor={settings.accentColor} themeClasses={themeClasses} />
+                                  ))}
+                                </div>
+                              </SortableContext>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </SortableContext>
 
                         {/* Collapsed Folders Grid */}
                         {collapsedFoldersList.length > 0 && (
@@ -486,21 +742,23 @@ const App: React.FC = () => {
                               Collapsed Folders
                             </h2>
                             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                              {collapsedFoldersList.map(([category, categoryLinks]: [string, LinkItem[]]) => (
-                                <button
-                                  key={category}
-                                  onClick={() => toggleFolder(category)}
-                                  className={`flex flex-col items-center p-4 rounded-xl ${themeClasses.card} border ${themeClasses.border} hover:border-gray-500 transition-all group text-center`}
-                                >
-                                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 ${themeClasses.button} transition-colors`}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${accentClasses.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                                    </svg>
-                                  </div>
-                                  <span className="text-sm font-medium text-gray-300 group-hover:text-white truncate w-full px-1">{category}</span>
-                                  <span className="text-[10px] text-gray-600 mt-1">{categoryLinks.length} items</span>
-                                </button>
-                              ))}
+                              <SortableContext items={collapsedFoldersList.map(([cat]: [CategoryItem, LinkItem[]]) => cat.id)} strategy={rectSortingStrategy}>
+                                {collapsedFoldersList.map(([category, categoryLinks]: [CategoryItem, LinkItem[]]) => (
+                                  <button
+                                    key={category.id}
+                                    onClick={() => toggleFolder(category.name)}
+                                    className={`flex flex-col items-center p-4 rounded-xl ${themeClasses.card} border ${themeClasses.border} hover:border-gray-500 transition-all group text-center`}
+                                  >
+                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 ${themeClasses.button} transition-colors`}>
+                                      <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${category.color || 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                      </svg>
+                                    </div>
+                                    <span className="text-sm font-medium text-gray-300 group-hover:text-white truncate w-full px-1">{category.name}</span>
+                                    <span className="text-[10px] text-gray-600 mt-1">{categoryLinks.length} items</span>
+                                  </button>
+                                ))}
+                              </SortableContext>
                             </div>
                           </div>
                         )}
@@ -523,12 +781,31 @@ const App: React.FC = () => {
                         )}
                         {hasNotes && (
                            <section>
-                            <h2 className={`text-2xl font-bold mb-4 border-b-2 pb-2 ${accentClasses.border} ${accentClasses.text}`}>Notes</h2>
-                            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-1">
-                              {notes.map(note => (
-                                <NoteCard key={note.id} note={note} onDelete={handleDeleteNote} accentColor={settings.accentColor} themeClasses={themeClasses} />
-                              ))}
-                            </div>
+                            <button 
+                              onClick={() => setCollapsedNotes(!collapsedNotes)}
+                              className={`w-full flex items-center justify-between mb-4 border-b-2 pb-2 ${accentClasses.border} group transition-colors`}
+                            >
+                              <h2 className={`text-2xl font-bold ${accentClasses.text}`}>Notes</h2>
+                              <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${accentClasses.text} transition-transform duration-200 ${collapsedNotes ? '-rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                            {!collapsedNotes && (
+                              <SortableContext items={notes.map(n => n.id)} strategy={verticalListSortingStrategy}>
+                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-1 animate-fadeIn">
+                                  {notes.map(note => (
+                                    <NoteCard 
+                                      key={note.id} 
+                                      note={note} 
+                                      onDelete={handleDeleteNote} 
+                                      onUpdate={handleUpdateNote}
+                                      accentColor={settings.accentColor} 
+                                      themeClasses={themeClasses} 
+                                    />
+                                  ))}
+                                </div>
+                              </SortableContext>
+                            )}
                           </section>
                         )}
                        </div>
@@ -536,7 +813,7 @@ const App: React.FC = () => {
                   )}
                 </div>
               )}
-            </>
+            </DndContext>
           )}
         </main>
       </div>
@@ -579,10 +856,11 @@ const App: React.FC = () => {
           onImport={handleImport} 
           onDeleteAllData={handleDeleteAllData} 
           themeClasses={themeClasses}
-          categories={Object.keys(groupedLinks)}
+          categories={categories}
           onRenameFolder={handleRenameFolder}
           onDeleteFolder={handleDeleteFolder}
           onCreateFolder={handleCreateFolder}
+          onUpdateFolderColor={handleUpdateFolderColor}
         /> 
       )}
       {isAIChatOpen && ( <AIChatView onClose={() => setAIChatOpen(false)} themeClasses={themeClasses} accentColor={settings.accentColor} /> )}

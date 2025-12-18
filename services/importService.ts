@@ -1,9 +1,11 @@
-import { LinkItem, NoteItem, EventItem } from '../types';
+import { LinkItem, NoteItem, EventItem, CategoryItem, Settings } from '../types';
 
 export interface ImportData {
   links: LinkItem[];
   notes: NoteItem[];
   events: EventItem[];
+  categories?: CategoryItem[];
+  settings?: Partial<Settings>;
 }
 
 export const parseJsonBackup = (jsonString: string): ImportData => {
@@ -16,6 +18,8 @@ export const parseJsonBackup = (jsonString: string): ImportData => {
     links: data.links,
     notes: data.notes,
     events: data.events || [],
+    categories: data.categories || [],
+    settings: data.settings || {},
   };
 };
 

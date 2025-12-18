@@ -7,6 +7,7 @@ export interface LinkItem {
   title: string;
   createdAt: number;
   category?: string;
+  order?: number;
 }
 
 export interface NoteItem {
@@ -14,6 +15,7 @@ export interface NoteItem {
   title: string;
   content: string;
   createdAt: number;
+  order?: number;
 }
 
 export interface EventItem {
@@ -30,6 +32,8 @@ export interface CategoryItem {
   id: string;
   name: string;
   createdAt: number;
+  color?: string;
+  order?: number;
 }
 
 export type AccentColor = 'blue' | 'green' | 'purple' | 'pink' | 'orange';
@@ -40,6 +44,8 @@ export interface Settings {
   accentColor: AccentColor;
   searchUrl: string;
   backgroundName: BackgroundName;
+  weatherCity?: string;
+  autoLocation?: boolean;
 }
 
 export type DbStore = 'links' | 'notes' | 'events' | 'categories';

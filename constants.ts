@@ -18,6 +18,19 @@ export const ACCENT_COLOR_CLASSES: Record<AccentColor, { bg: string; text: strin
   orange: { bg: 'bg-orange-600', text: 'text-orange-400', ring: 'focus:ring-orange-500', border: 'border-orange-500' },
 };
 
+export const FOLDER_COLORS = [
+  { name: 'Default', class: 'text-gray-400' },
+  { name: 'Blue', class: 'text-blue-400' },
+  { name: 'Green', class: 'text-green-400' },
+  { name: 'Purple', class: 'text-purple-400' },
+  { name: 'Pink', class: 'text-pink-400' },
+  { name: 'Orange', class: 'text-orange-400' },
+  { name: 'Red', class: 'text-red-400' },
+  { name: 'Yellow', class: 'text-yellow-400' },
+  { name: 'Cyan', class: 'text-cyan-400' },
+  { name: 'Indigo', class: 'text-indigo-400' },
+];
+
 export const BACKGROUND_NAMES: BackgroundName[] = ['gray', 'slate', 'onyx'];
 
 export const BACKGROUND_THEMES: Record<BackgroundName, {

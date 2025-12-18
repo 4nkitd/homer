@@ -1,6 +1,7 @@
 
 
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ThemeClasses } from '../types';
 
 interface ModalProps {
@@ -25,9 +26,9 @@ const Modal: React.FC<ModalProps> = ({ onClose, children, title, themeClasses, m
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div 
-      className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4" 
+      className="fixed inset-0 bg-black bg-opacity-70 z-[9999] flex justify-center items-center p-4" 
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -49,7 +50,8 @@ const Modal: React.FC<ModalProps> = ({ onClose, children, title, themeClasses, m
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

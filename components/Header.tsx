@@ -8,6 +8,7 @@ interface HeaderProps {
   accentColor: AccentColor;
   themeClasses: ThemeClasses;
   eventsToday: EventItem[];
+  weatherCity?: string;
 }
 
 const Header: React.FC<HeaderProps> = ({ onSettingsClick, accentColor, themeClasses, eventsToday }) => {
@@ -16,11 +17,9 @@ const Header: React.FC<HeaderProps> = ({ onSettingsClick, accentColor, themeClas
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentDate(new Date());
-    }, 1000); // Update every second
+    }, 1000);
 
-    return () => {
-      clearInterval(timer); // Cleanup on component unmount
-    };
+    return () => clearInterval(timer);
   }, []);
 
   const accentClasses = ACCENT_COLOR_CLASSES[accentColor];
@@ -47,38 +46,48 @@ const Header: React.FC<HeaderProps> = ({ onSettingsClick, accentColor, themeClas
   }
 
   return (
-    <header className="flex justify-between items-start mb-6">
-      <div>
-        <div className="flex items-baseline space-x-4">
-            <h1 className={`text-3xl sm:text-4xl font-bold ${accentClasses.text}`}>{formattedTime}</h1>
-            <p className="text-gray-400 text-lg sm:text-xl font-light">{formattedDate}</p>
-        </div>
-        <div className="mt-3 text-gray-400 space-y-2 text-sm sm:text-base">
-          {eventsToday.length === 0 ? (
-            <div className="flex items-center space-x-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span>No events scheduled for today.</span>
+    <header className="flex justify-between items-start mb-10">
+      <div className="flex-1">
+        <div className="flex flex-col">
+          <div className="flex items-baseline space-x-4">
+            <h1 className={`text-4xl sm:text-5xl font-bold ${accentClasses.text} tabular-nums tracking-tight`}>{formattedTime}</h1>
+            <p className="text-gray-400 text-xl sm:text-2xl font-light">{formattedDate}</p>
+          </div>
+          
+          <div className="mt-6 flex flex-col space-y-4">
+            {/* Events Section */}
+            <div className="space-y-3">
+              {eventsToday.length > 0 ? (
+                eventsToday.map(event => (
+                  <div key={event.id} className="flex items-center space-x-4 text-gray-400 animate-fadeIn group pl-1">
+                    <div className={`w-1 h-8 rounded-full ${accentClasses.bg} opacity-40 group-hover:opacity-100 transition-all duration-300`} />
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                        {event.time ? formatEventTime(event.time) : 'All-day'}
+                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-gray-200 group-hover:text-white transition-colors font-medium">{event.title}</span>
+                        {event.link && (
+                          <a href={event.link.startsWith('http') ? event.link : `https://${event.link}`} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-white transition-colors" aria-label="Open event link">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center space-x-2 text-gray-500 pl-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-sm italic">No events scheduled for today.</span>
+                </div>
+              )}
             </div>
-          ) : (
-            eventsToday.map(event => (
-              <div key={event.id} className="flex items-center space-x-2 animate-fadeIn">
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="font-semibold text-gray-300 w-24 flex-shrink-0">{event.time ? formatEventTime(event.time) : 'All-day'}</span>
-                <span className="truncate">{event.title}</span>
-                {event.link && (
-                  <a href={event.link.startsWith('http') ? event.link : `https://${event.link}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white" aria-label="Open event link">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                  </a>
-                )}
-              </div>
-            ))
-          )}
+          </div>
         </div>
       </div>
       <button

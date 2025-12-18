@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import Modal from './Modal';
-import { Settings, AccentColor, ThemeClasses, BackgroundName } from '../types';
-import { ACCENT_COLORS, ACCENT_COLOR_CLASSES, BACKGROUND_NAMES, BACKGROUND_THEMES } from '../constants';
+import { Settings, AccentColor, ThemeClasses, BackgroundName, CategoryItem } from '../types';
+import { ACCENT_COLORS, ACCENT_COLOR_CLASSES, BACKGROUND_NAMES, BACKGROUND_THEMES, FOLDER_COLORS } from '../constants';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -11,13 +11,14 @@ interface SettingsModalProps {
   onImport: (file: File) => void;
   onDeleteAllData: () => void;
   themeClasses: ThemeClasses;
-  categories: string[];
+  categories: CategoryItem[];
   onRenameFolder: (oldName: string, newName: string) => void;
   onDeleteFolder: (name: string) => void;
-  onCreateFolder: (name: string) => void;
+  onCreateFolder: (name: string, color?: string) => void;
+  onUpdateFolderColor: (name: string, color: string) => void;
 }
 
-type Tab = 'personalization' | 'folders' | 'search' | 'shortcuts' | 'data' | 'danger';
+type Tab = 'personalization' | 'folders' | 'weather' | 'search' | 'shortcuts' | 'data' | 'danger';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
   onClose, 
@@ -30,7 +31,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   categories,
   onRenameFolder,
   onDeleteFolder,
-  onCreateFolder
+  onCreateFolder,
+  onUpdateFolderColor
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('personalization');
   const [captcha, setCaptcha] = useState('');
@@ -40,6 +42,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [createFolderName, setCreateFolderName] = useState('');
+  const [createFolderColor, setCreateFolderColor] = useState(FOLDER_COLORS[0].class);
+  const [showColorPicker, setShowColorPicker] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const generateCaptcha = () => {
@@ -87,6 +91,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'personalization', label: 'Personalization', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg> },
     { id: 'folders', label: 'Folders', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg> },
+    { id: 'weather', label: 'Weather', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg> },
     { id: 'search', label: 'Search', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> },
     { id: 'shortcuts', label: 'Shortcuts', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" /></svg> },
     { id: 'data', label: 'Data', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg> },
@@ -177,48 +182,65 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               {isCreatingFolder && (
                 <div className={`p-4 rounded-lg ${themeClasses.card} border ${themeClasses.border} animate-fadeIn`}>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Folder Name</label>
-                  <div className="flex space-x-2">
-                    <input
-                      type="text"
-                      value={createFolderName}
-                      onChange={(e) => setCreateFolderName(e.target.value)}
-                      placeholder="Enter folder name..."
-                      className={`flex-1 px-3 py-2 rounded-md ${themeClasses.input} border ${themeClasses.border} text-white focus:outline-none focus:ring-2 ${accentClasses.ring}`}
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          onCreateFolder(createFolderName);
+                  <div className="flex flex-col space-y-4">
+                    <div className="flex space-x-2">
+                      <input
+                        type="text"
+                        value={createFolderName}
+                        onChange={(e) => setCreateFolderName(e.target.value)}
+                        placeholder="Enter folder name..."
+                        className={`flex-1 px-3 py-2 rounded-md ${themeClasses.input} border ${themeClasses.border} text-white focus:outline-none focus:ring-2 ${accentClasses.ring}`}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            onCreateFolder(createFolderName, createFolderColor);
+                            setCreateFolderName('');
+                            setIsCreatingFolder(false);
+                          } else if (e.key === 'Escape') {
+                            setIsCreatingFolder(false);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">Folder Color</label>
+                      <div className="flex flex-wrap gap-2">
+                        {FOLDER_COLORS.map(color => (
+                          <button
+                            key={color.name}
+                            onClick={() => setCreateFolderColor(color.class)}
+                            className={`w-8 h-8 rounded-full border-2 transition-all ${color.class.replace('text-', 'bg-')} ${createFolderColor === color.class ? 'border-white scale-110' : 'border-transparent opacity-70 hover:opacity-100'}`}
+                            title={color.name}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={() => setIsCreatingFolder(false)}
+                        className="px-4 py-2 rounded-md bg-gray-600 text-white font-medium text-sm"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          onCreateFolder(createFolderName, createFolderColor);
                           setCreateFolderName('');
                           setIsCreatingFolder(false);
-                        } else if (e.key === 'Escape') {
-                          setIsCreatingFolder(false);
-                        }
-                      }}
-                    />
-                    <button
-                      onClick={() => {
-                        onCreateFolder(createFolderName);
-                        setCreateFolderName('');
-                        setIsCreatingFolder(false);
-                      }}
-                      className={`px-4 py-2 rounded-md ${accentClasses.bg} text-white font-medium`}
-                    >
-                      Create
-                    </button>
-                    <button
-                      onClick={() => setIsCreatingFolder(false)}
-                      className="px-4 py-2 rounded-md bg-gray-600 text-white font-medium"
-                    >
-                      Cancel
-                    </button>
+                        }}
+                        className={`px-4 py-2 rounded-md ${accentClasses.bg} text-white font-medium text-sm`}
+                      >
+                        Create Folder
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
                 
               <div className="space-y-2">
                   {categories.map(category => (
-                    <div key={category} className={`flex items-center justify-between p-3 rounded-lg ${themeClasses.button} border ${themeClasses.border}`}>
-                      {editingFolder === category ? (
+                    <div key={category.id} className={`flex items-center justify-between p-3 rounded-lg ${themeClasses.button} border ${themeClasses.border}`}>
+                      {editingFolder === category.id ? (
                         <div className="flex-1 flex items-center space-x-2">
                           <input
                             type="text"
@@ -228,7 +250,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
-                                onRenameFolder(category, newFolderName);
+                                onRenameFolder(category.name, newFolderName);
                                 setEditingFolder(null);
                               } else if (e.key === 'Escape') {
                                 setEditingFolder(null);
@@ -237,7 +259,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           />
                           <button 
                             onClick={() => {
-                              onRenameFolder(category, newFolderName);
+                              onRenameFolder(category.name, newFolderName);
                               setEditingFolder(null);
                             }}
                             className={`p-1 rounded ${accentClasses.bg} text-white`}
@@ -258,16 +280,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       ) : (
                         <>
                           <div className="flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 mr-3 ${accentClasses.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                            </svg>
-                            <span className="text-sm text-white font-medium">{category}</span>
+                            <div className="relative">
+                              <button 
+                                onClick={() => setShowColorPicker(showColorPicker === category.id ? null : category.id)}
+                                className={`p-1 rounded hover:bg-gray-700 transition-colors mr-2`}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${category.color || 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                </svg>
+                              </button>
+                              
+                              {showColorPicker === category.id && (
+                                <div className={`absolute left-0 top-full mt-2 z-50 p-2 rounded-lg ${themeClasses.modal} border ${themeClasses.border} shadow-xl flex gap-1 animate-fadeIn`}>
+                                  {FOLDER_COLORS.map(color => (
+                                    <button
+                                      key={color.name}
+                                      onClick={() => {
+                                        onUpdateFolderColor(category.name, color.class);
+                                        setShowColorPicker(null);
+                                      }}
+                                      className={`w-6 h-6 rounded-full border transition-all ${color.class.replace('text-', 'bg-')} ${category.color === color.class ? 'border-white scale-110' : 'border-transparent opacity-70 hover:opacity-100'}`}
+                                      title={color.name}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-sm text-white font-medium">{category.name}</span>
                           </div>
                           <div className="flex items-center space-x-1">
                             <button 
                               onClick={() => {
-                                setEditingFolder(category);
-                                setNewFolderName(category);
+                                setEditingFolder(category.id);
+                                setNewFolderName(category.name);
                               }}
                               className="p-2 text-gray-400 hover:text-white transition-colors"
                               title="Rename folder"
@@ -276,9 +321,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                               </svg>
                             </button>
-                            {category !== 'General' && (
+                            {category.name !== 'General' && (
                               <button 
-                                onClick={() => onDeleteFolder(category)}
+                                onClick={() => onDeleteFolder(category.name)}
                                 className="p-2 text-gray-400 hover:text-red-400 transition-colors"
                                 title="Delete folder"
                               >
@@ -296,34 +341,63 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
           )}
 
+          {activeTab === 'weather' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div>
+                <h3 className="text-lg font-medium leading-6 text-white mb-4">Weather Settings</h3>
+                <div className="flex items-center justify-between p-4 rounded-lg bg-black/20 border border-white/5">
+                  <div>
+                    <p className="text-sm font-medium text-gray-200">Show Local Weather</p>
+                    <p className="text-xs text-gray-400 mt-1">Automatically detect your city via IP to show weather in the header.</p>
+                  </div>
+                  <button
+                    onClick={() => onUpdateSettings({ autoLocation: !settings.autoLocation })}
+                    className={`${settings.autoLocation ? accentClasses.bg : themeClasses.toggleOff} relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${themeClasses.ringOffsetModal} ${accentClasses.ring}`}
+                  >
+                    <span className={`${settings.autoLocation ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`} />
+                  </button>
+                </div>
+                {settings.autoLocation && settings.weatherCity && (
+                  <div className="mt-4 px-4 py-2 rounded-md bg-white/5 border border-white/5 flex items-center justify-between">
+                    <span className="text-xs text-gray-500 uppercase tracking-widest">Detected City</span>
+                    <span className="text-sm text-gray-300 font-medium">{settings.weatherCity}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'search' && (
             <div className="space-y-6 animate-fadeIn">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium leading-6 text-white">Show Search Bar</h3>
-                  <p className="text-sm text-gray-400">Enable or disable the search bar on the dashboard.</p>
-                </div>
-                <button
-                  onClick={() => onUpdateSettings({ showSearch: !settings.showSearch })}
-                  className={`${settings.showSearch ? accentClasses.bg : themeClasses.toggleOff} relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${themeClasses.ringOffsetModal} ${accentClasses.ring}`}
-                >
-                  <span className={`${settings.showSearch ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`} />
-                </button>
-              </div>
               <div>
-                <label htmlFor="search-url" className="block text-lg font-medium leading-6 text-white mb-2">
-                  Search Engine URL
-                </label>
-                <input
-                  id="search-url"
-                  type="text"
-                  value={settings.searchUrl}
-                  onChange={(e) => onUpdateSettings({ searchUrl: e.target.value })}
-                  className={`block w-full ${themeClasses.input} border ${themeClasses.border} rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-2 ${accentClasses.ring} focus:border-transparent`}
-                />
-                <p className="mt-2 text-sm text-gray-400">
-                  Use <code className={`${themeClasses.button} px-1 py-0.5 rounded-sm text-white`}>{`{query}`}</code> as a placeholder for the search term.
-                </p>
+                <h3 className="text-lg font-medium leading-6 text-white mb-4">Search Settings</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm text-gray-200">Show Search Bar</p>
+                    <p className="text-xs text-gray-400">Enable or disable the search bar on the dashboard.</p>
+                  </div>
+                  <button
+                    onClick={() => onUpdateSettings({ showSearch: !settings.showSearch })}
+                    className={`${settings.showSearch ? accentClasses.bg : themeClasses.toggleOff} relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${themeClasses.ringOffsetModal} ${accentClasses.ring}`}
+                  >
+                    <span className={`${settings.showSearch ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`} />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="search-url" className="block text-sm font-medium text-gray-300">
+                    Search Engine URL
+                  </label>
+                  <input
+                    id="search-url"
+                    type="text"
+                    value={settings.searchUrl}
+                    onChange={(e) => onUpdateSettings({ searchUrl: e.target.value })}
+                    className={`block w-full ${themeClasses.input} border ${themeClasses.border} rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-2 ${accentClasses.ring} focus:border-transparent text-sm`}
+                  />
+                  <p className="text-[10px] text-gray-500">
+                    Use <code className={`${themeClasses.button} px-1 py-0.5 rounded-sm text-white`}>{`{query}`}</code> as a placeholder.
+                  </p>
+                </div>
               </div>
             </div>
           )}
