@@ -7,12 +7,13 @@ import { CSS } from '@dnd-kit/utilities';
 
 interface LinkCardProps {
   link: LinkItem;
-  onDelete: (id: string) => void;
+  onDelete?: (id: string) => void;
   accentColor: AccentColor;
   themeClasses: ThemeClasses;
+  isOverlay?: boolean;
 }
 
-const LinkCard: React.FC<LinkCardProps> = ({ link, onDelete, accentColor, themeClasses }) => {
+const LinkCard: React.FC<LinkCardProps> = ({ link, onDelete, accentColor, themeClasses, isOverlay }) => {
   const {
     attributes,
     listeners,
@@ -20,13 +21,14 @@ const LinkCard: React.FC<LinkCardProps> = ({ link, onDelete, accentColor, themeC
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: link.id });
+  } = useSortable({ id: link.id, disabled: isOverlay });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    zIndex: isDragging ? 50 : 'auto',
+    zIndex: isDragging || isOverlay ? 50 : 'auto',
     opacity: isDragging ? 0.5 : 1,
+    cursor: isOverlay ? 'grabbing' : 'grab',
   };
 
   const accentClasses = ACCENT_COLOR_CLASSES[accentColor];
@@ -35,7 +37,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ link, onDelete, accentColor, themeC
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    onDelete(link.id);
+    onDelete?.(link.id);
   };
 
   const getHostname = (url: string) => {

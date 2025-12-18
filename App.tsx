@@ -7,6 +7,8 @@ import { ACCENT_COLOR_CLASSES, LINK_STORE, NOTE_STORE, EVENT_STORE, BACKGROUND_T
 import Header from './components/Header';
 import SearchBar from './components/SearchBar';
 import WeatherPill from './components/WeatherPill';
+import FolderHeader from './components/FolderHeader';
+import SortableCollapsedFolder from './components/SortableCollapsedFolder';
 import LinkCard from './components/LinkCard';
 import NoteCard from './components/NoteCard';
 import EventCard from './components/EventCard';
@@ -26,6 +28,10 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragStartEvent,
+  DragOverEvent,
+  DragOverlay,
+  defaultDropAnimationSideEffects,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -53,6 +59,7 @@ const App: React.FC = () => {
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
   const [isUtilityBarOpen, setUtilityBarOpen] = useState(false);
   const [isAIChatOpen, setAIChatOpen] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => {
     const saved = localStorage.getItem('collapsed-folders');
     return saved ? new Set(JSON.parse(saved)) : new Set();
@@ -509,7 +516,52 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeLink = links.find(l => l.id === active.id);
+    if (!activeLink) return;
+
+    // If hovering over another link, we might want to change category
+    const overLink = links.find(l => l.id === over.id);
+    if (overLink && activeLink.category !== overLink.category) {
+      setLinks(prev => {
+        const activeIndex = prev.findIndex(l => l.id === active.id);
+        const overIndex = prev.findIndex(l => l.id === over.id);
+        const updated = [...prev];
+        updated[activeIndex] = { ...activeLink, category: overLink.category };
+        return arrayMove(updated, activeIndex, overIndex);
+      });
+      return;
+    }
+
+    // If hovering over a category header
+    const overCat = categories.find(c => c.id === over.id);
+    if (overCat && activeLink.category !== overCat.name) {
+      setLinks(prev => {
+        const activeIndex = prev.findIndex(l => l.id === active.id);
+        const updated = [...prev];
+        updated[activeIndex] = { ...activeLink, category: overCat.name };
+        // Move to the end of that category
+        let lastIndex = -1;
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].category === overCat.name) {
+            lastIndex = i;
+            break;
+          }
+        }
+        return arrayMove(updated, activeIndex, lastIndex === -1 ? activeIndex : lastIndex);
+      });
+    }
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -528,15 +580,24 @@ const App: React.FC = () => {
       if (activeLink.category !== overLink.category) {
         const updatedLink = { ...activeLink, category: overLink.category };
         newLinks[newIndex] = updatedLink;
-        await update(LINK_STORE, updatedLink);
       }
 
-      // Update orders for all links in the affected categories
+      // Update orders for all links
       const updatedLinks = newLinks.map((link, index) => ({ ...link, order: index }));
       setLinks(updatedLinks);
       
       // Persist to DB
       await Promise.all(updatedLinks.map(link => update(LINK_STORE, link)));
+      return;
+    }
+
+    // Handle dropping link on a category header
+    const overCatHeader = categories.find(c => c.id === over.id);
+    if (activeLink && overCatHeader) {
+      const updatedLink = { ...activeLink, category: overCatHeader.name };
+      const newLinks = links.map(l => l.id === activeLink.id ? updatedLink : l);
+      setLinks(newLinks);
+      await update(LINK_STORE, updatedLink);
       return;
     }
 
@@ -688,6 +749,8 @@ const App: React.FC = () => {
             <DndContext 
               sensors={sensors}
               collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
             >
               {!hasLinks && !hasNotes && !hasEvents ? (
@@ -704,28 +767,23 @@ const App: React.FC = () => {
                         <SortableContext items={expandedFoldersList.map(([cat]: [CategoryItem, LinkItem[]]) => cat.id)} strategy={verticalListSortingStrategy}>
                           {expandedFoldersList.map(([category, categoryLinks]: [CategoryItem, LinkItem[]]) => (
                             <div key={category.id} className="animate-fadeIn">
-                              <button 
-                                onClick={() => toggleFolder(category.name)}
-                                className={`w-full flex items-center justify-between mb-4 border-b pb-1 ${themeClasses.border} group transition-colors hover:border-gray-500`}
-                              >
-                                <div className="flex items-center">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 mr-2 ${category.color || 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                                  </svg>
-                                  <h2 className="text-xl font-bold text-gray-400 group-hover:text-gray-200 transition-colors">{category.name}</h2>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <span className="text-xs text-gray-600 group-hover:text-gray-400">{categoryLinks.length} items</span>
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                </div>
-                              </button>
+                              <FolderHeader 
+                                category={category}
+                                itemCount={categoryLinks.length}
+                                isCollapsed={false}
+                                onToggle={() => toggleFolder(category.name)}
+                                themeClasses={themeClasses}
+                              />
                               <SortableContext items={categoryLinks.map(l => l.id)} strategy={rectSortingStrategy}>
-                                <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] animate-fadeIn">
+                                <div className={`grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] animate-fadeIn min-h-[100px] p-2 rounded-lg transition-colors ${activeId && links.find(l => l.id === activeId) ? 'bg-white/5 ring-2 ring-dashed ring-white/10' : ''}`}>
                                   {categoryLinks.map((link: LinkItem) => (
                                     <LinkCard key={link.id} link={link} onDelete={handleDeleteLink} accentColor={settings.accentColor} themeClasses={themeClasses} />
                                   ))}
+                                  {categoryLinks.length === 0 && (
+                                    <div className="col-span-full flex items-center justify-center py-8 text-gray-600 border-2 border-dashed border-gray-800 rounded-xl">
+                                      <p className="text-sm italic">Drop links here</p>
+                                    </div>
+                                  )}
                                 </div>
                               </SortableContext>
                             </div>
@@ -744,19 +802,13 @@ const App: React.FC = () => {
                             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                               <SortableContext items={collapsedFoldersList.map(([cat]: [CategoryItem, LinkItem[]]) => cat.id)} strategy={rectSortingStrategy}>
                                 {collapsedFoldersList.map(([category, categoryLinks]: [CategoryItem, LinkItem[]]) => (
-                                  <button
+                                  <SortableCollapsedFolder 
                                     key={category.id}
-                                    onClick={() => toggleFolder(category.name)}
-                                    className={`flex flex-col items-center p-4 rounded-xl ${themeClasses.card} border ${themeClasses.border} hover:border-gray-500 transition-all group text-center`}
-                                  >
-                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-3 ${themeClasses.button} transition-colors`}>
-                                      <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${category.color || 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                                      </svg>
-                                    </div>
-                                    <span className="text-sm font-medium text-gray-300 group-hover:text-white truncate w-full px-1">{category.name}</span>
-                                    <span className="text-[10px] text-gray-600 mt-1">{categoryLinks.length} items</span>
-                                  </button>
+                                    category={category}
+                                    itemCount={categoryLinks.length}
+                                    onToggle={() => toggleFolder(category.name)}
+                                    themeClasses={themeClasses}
+                                  />
                                 ))}
                               </SortableContext>
                             </div>
@@ -813,6 +865,58 @@ const App: React.FC = () => {
                   )}
                 </div>
               )}
+              <DragOverlay dropAnimation={{
+                sideEffects: defaultDropAnimationSideEffects({
+                  styles: {
+                    active: {
+                      opacity: '0.5',
+                    },
+                  },
+                }),
+              }}>
+                {activeId ? (
+                  (() => {
+                    const activeLink = links.find(l => l.id === activeId);
+                    if (activeLink) return <LinkCard link={activeLink} accentColor={settings.accentColor} themeClasses={themeClasses} isOverlay />;
+                    
+                    const activeNote = notes.find(n => n.id === activeId);
+                    if (activeNote) return <NoteCard note={activeNote} accentColor={settings.accentColor} themeClasses={themeClasses} isOverlay />;
+                    
+                    const activeCat = categories.find(c => c.id === activeId);
+                    if (activeCat) {
+                      const catLinks = links.filter(l => (l.category || 'General') === activeCat.name);
+                      const isCollapsed = collapsedFolders.has(activeCat.name);
+                      
+                      if (isCollapsed) {
+                        return (
+                          <div className="w-[150px]">
+                            <SortableCollapsedFolder 
+                              category={activeCat} 
+                              itemCount={catLinks.length} 
+                              onToggle={() => {}} 
+                              themeClasses={themeClasses} 
+                              isOverlay 
+                            />
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="w-[300px]">
+                          <FolderHeader 
+                            category={activeCat} 
+                            itemCount={catLinks.length} 
+                            isCollapsed={false} 
+                            themeClasses={themeClasses} 
+                            isOverlay 
+                          />
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()
+                ) : null}
+              </DragOverlay>
             </DndContext>
           )}
         </main>

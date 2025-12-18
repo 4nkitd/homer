@@ -8,13 +8,14 @@ import Modal from './Modal';
 
 interface NoteCardProps {
   note: NoteItem;
-  onDelete: (id: string) => void;
-  onUpdate: (note: NoteItem) => void;
+  onDelete?: (id: string) => void;
+  onUpdate?: (note: NoteItem) => void;
   accentColor: AccentColor;
   themeClasses: ThemeClasses;
+  isOverlay?: boolean;
 }
 
-const NoteCard: React.FC<NoteCardProps> = ({ note, onDelete, onUpdate, accentColor, themeClasses }) => {
+const NoteCard: React.FC<NoteCardProps> = ({ note, onDelete, onUpdate, accentColor, themeClasses, isOverlay }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editTitle, setEditTitle] = useState(note.title);
@@ -27,13 +28,14 @@ const NoteCard: React.FC<NoteCardProps> = ({ note, onDelete, onUpdate, accentCol
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: note.id });
+  } = useSortable({ id: note.id, disabled: isOverlay });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    zIndex: isDragging ? 50 : 'auto',
+    zIndex: isDragging || isOverlay ? 50 : 'auto',
     opacity: isDragging ? 0.5 : 1,
+    cursor: isOverlay ? 'grabbing' : 'grab',
   };
 
   const accentClasses = ACCENT_COLOR_CLASSES[accentColor];
