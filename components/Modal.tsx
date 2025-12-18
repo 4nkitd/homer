@@ -8,9 +8,11 @@ interface ModalProps {
   children: React.ReactNode;
   title: string;
   themeClasses: ThemeClasses;
+  maxWidth?: string;
+  noPadding?: boolean;
 }
 
-const Modal: React.FC<ModalProps> = ({ onClose, children, title, themeClasses }) => {
+const Modal: React.FC<ModalProps> = ({ onClose, children, title, themeClasses, maxWidth = 'max-w-md', noPadding = false }) => {
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -32,7 +34,7 @@ const Modal: React.FC<ModalProps> = ({ onClose, children, title, themeClasses })
       aria-labelledby="modal-title"
     >
       <div 
-        className={`${themeClasses.modal} rounded-lg shadow-xl w-full max-w-md animate-fadeIn`}
+        className={`${themeClasses.modal} rounded-lg shadow-xl w-full ${maxWidth} animate-fadeIn`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className={`flex justify-between items-center p-4 border-b ${themeClasses.border}`}>
@@ -43,7 +45,7 @@ const Modal: React.FC<ModalProps> = ({ onClose, children, title, themeClasses })
             </svg>
           </button>
         </div>
-        <div className="p-6">
+        <div className={noPadding ? 'p-0' : 'p-6'}>
           {children}
         </div>
       </div>

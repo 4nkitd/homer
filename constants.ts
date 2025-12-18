@@ -2,10 +2,11 @@
 import { AccentColor, BackgroundName } from './types';
 
 export const DB_NAME = 'PersonalDashboardDB';
-export const DB_VERSION = 1;
+export const DB_VERSION = 3;
 export const LINK_STORE = 'links';
 export const NOTE_STORE = 'notes';
 export const EVENT_STORE = 'events';
+export const CATEGORY_STORE = 'categories';
 
 export const ACCENT_COLORS: AccentColor[] = ['blue', 'green', 'purple', 'pink', 'orange'];
 

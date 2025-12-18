@@ -6,6 +6,7 @@ export interface LinkItem {
   url: string;
   title: string;
   createdAt: number;
+  category?: string;
 }
 
 export interface NoteItem {
@@ -25,6 +26,12 @@ export interface EventItem {
   createdAt: number;
 }
 
+export interface CategoryItem {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
 export type AccentColor = 'blue' | 'green' | 'purple' | 'pink' | 'orange';
 export type BackgroundName = 'gray' | 'slate' | 'onyx';
 
@@ -35,6 +42,6 @@ export interface Settings {
   backgroundName: BackgroundName;
 }
 
-export type DbStore = 'links' | 'notes' | 'events';
+export type DbStore = 'links' | 'notes' | 'events' | 'categories';
 
 export type ThemeClasses = typeof BACKGROUND_THEMES[keyof typeof BACKGROUND_THEMES];

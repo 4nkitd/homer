@@ -1,5 +1,5 @@
 
-import { DB_NAME, DB_VERSION, LINK_STORE, NOTE_STORE, EVENT_STORE } from '../constants';
+import { DB_NAME, DB_VERSION, LINK_STORE, NOTE_STORE, EVENT_STORE, CATEGORY_STORE } from '../constants';
 import { DbStore, LinkItem, NoteItem } from '../types';
 
 let db: IDBDatabase;
@@ -32,6 +32,9 @@ const getDb = (): Promise<IDBDatabase> => {
       if (!dbInstance.objectStoreNames.contains(EVENT_STORE)) {
         dbInstance.createObjectStore(EVENT_STORE, { keyPath: 'id' });
       }
+      if (!dbInstance.objectStoreNames.contains(CATEGORY_STORE)) {
+        dbInstance.createObjectStore(CATEGORY_STORE, { keyPath: 'id' });
+      }
     };
   });
 };
@@ -63,6 +66,21 @@ export const add = async <T,>(storeName: DbStore, item: T): Promise<void> => {
     request.onsuccess = () => resolve();
     request.onerror = () => {
         console.error('Error adding item:', request.error);
+        reject(request.error);
+    };
+  });
+};
+
+export const update = async <T,>(storeName: DbStore, item: T): Promise<void> => {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readwrite');
+    const store = transaction.objectStore(storeName);
+    const request = store.put(item);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => {
+        console.error('Error updating item:', request.error);
         reject(request.error);
     };
   });
